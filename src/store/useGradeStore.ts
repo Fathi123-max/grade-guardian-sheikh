@@ -3,8 +3,8 @@ import { Student, Test, Grade, FormattedStudent } from '../types';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
-// Define state type
-type State = {
+// Define the store state
+type GradeStoreState = {
   students: Student[];
   tests: Test[];
   grades: Grade[];
@@ -12,32 +12,42 @@ type State = {
   error: string | null;
 };
 
-// Define actions type
-type Actions = {
+// Define the store actions
+type GradeStoreActions = {
+  // Data fetching
   fetchStudents: (userId: string) => Promise<void>;
   fetchTests: (userId: string) => Promise<void>;
   fetchGrades: (userId: string) => Promise<void>;
   fetchAllData: (userId: string) => Promise<void>;
+  
+  // Student operations
   addStudent: (name: string, userId: string) => Promise<Student | null>;
   updateStudent: (id: string, name: string) => Promise<void>;
   deleteStudent: (id: string) => Promise<void>;
+  
+  // Test operations
   addTest: (name: string, maxGrade: number, userId: string) => Promise<Test | null>;
   updateTest: (id: string, name: string, maxGrade: number) => Promise<void>;
   deleteTest: (id: string) => Promise<void>;
+  
+  // Grade operations
   updateGrade: (studentId: string, testId: string, value: number) => Promise<void>;
+  
+  // Helper functions
   getFormattedStudents: () => FormattedStudent[];
   getTotalMaxGrade: () => number;
 };
 
-// Create the store with explicit types
-export const useStore = create<State & Actions>((set, get) => ({
+// Create the store with a simpler type structure
+export const useGradeStore = create<GradeStoreState & GradeStoreActions>((set, get) => ({
+  // Initial state
   students: [],
   tests: [],
   grades: [],
   isLoading: false,
   error: null,
 
-  // Fetch data
+  // Data fetching
   fetchStudents: async (userId: string) => {
     try {
       set({ isLoading: true });
@@ -152,18 +162,21 @@ export const useStore = create<State & Actions>((set, get) => ({
       set({ isLoading: true });
       const { data, error } = await supabase
         .from('students')
-        .insert({ name, user_id: userId })
+        .insert([{ name, user_id: userId }])
         .select()
         .single();
 
       if (error) throw error;
       
-      set((state) => ({
-        students: [...state.students, data]
-      }));
+      if (data) {
+        const newStudent = { ...data, name };
+        set((state) => ({
+          students: [...state.students, newStudent]
+        }));
+        return newStudent;
+      }
       
-      toast.success('تم إضافة الطالب بنجاح');
-      return data;
+      return null;
     } catch (error) {
       console.error('Error adding student:', error);
       set({ error: 'حدث خطأ أثناء إضافة الطالب' });
@@ -185,7 +198,7 @@ export const useStore = create<State & Actions>((set, get) => ({
       if (error) throw error;
       
       set((state) => ({
-        students: state.students.map(student => 
+        students: state.students.map((student) =>
           student.id === id ? { ...student, name } : student
         )
       }));
@@ -204,12 +217,12 @@ export const useStore = create<State & Actions>((set, get) => ({
     try {
       set({ isLoading: true });
       
-      // First delete related grades
+      // First, delete all grades for this student
       const { error: gradesError } = await supabase
         .from('grades')
         .delete()
         .eq('studentid', id);
-
+        
       if (gradesError) throw gradesError;
       
       // Then delete the student
@@ -220,9 +233,10 @@ export const useStore = create<State & Actions>((set, get) => ({
 
       if (error) throw error;
       
+      // Update the local state
       set((state) => ({
-        students: state.students.filter(student => student.id !== id),
-        grades: state.grades.filter(grade => grade.studentId !== id)
+        students: state.students.filter((student) => student.id !== id),
+        grades: state.grades.filter((grade) => grade.studentId !== id)
       }));
       
       toast.success('تم حذف الطالب بنجاح');
@@ -241,24 +255,26 @@ export const useStore = create<State & Actions>((set, get) => ({
       set({ isLoading: true });
       const { data, error } = await supabase
         .from('tests')
-        .insert({ name, maxgrade: maxGrade, user_id: userId }) // Use maxgrade (lowercase) to match DB column name
+        .insert([{ name, maxgrade: maxGrade, user_id: userId }])
         .select()
         .single();
 
       if (error) throw error;
       
-      // Convert database fields to our model format
-      const newTest = {
-        ...data,
-        maxGrade: data.maxgrade // Map maxgrade -> maxGrade
-      };
+      if (data) {
+        const newTest = {
+          ...data,
+          maxGrade: data.maxgrade // Map maxgrade -> maxGrade
+        };
+        
+        set((state) => ({
+          tests: [...state.tests, newTest]
+        }));
+        
+        return newTest;
+      }
       
-      set((state) => ({
-        tests: [...state.tests, newTest]
-      }));
-      
-      toast.success('تم إضافة الاختبار بنجاح');
-      return newTest;
+      return null;
     } catch (error) {
       console.error('Error adding test:', error);
       set({ error: 'حدث خطأ أثناء إضافة الاختبار' });
@@ -274,13 +290,13 @@ export const useStore = create<State & Actions>((set, get) => ({
       set({ isLoading: true });
       const { error } = await supabase
         .from('tests')
-        .update({ name, maxgrade: maxGrade }) // Use maxgrade (lowercase) to match DB column name
+        .update({ name, maxgrade: maxGrade })
         .eq('id', id);
 
       if (error) throw error;
       
       set((state) => ({
-        tests: state.tests.map(test => 
+        tests: state.tests.map((test) =>
           test.id === id ? { ...test, name, maxGrade } : test
         )
       }));
@@ -299,12 +315,12 @@ export const useStore = create<State & Actions>((set, get) => ({
     try {
       set({ isLoading: true });
       
-      // First delete related grades
+      // First, delete all grades for this test
       const { error: gradesError } = await supabase
         .from('grades')
         .delete()
         .eq('testid', id);
-
+        
       if (gradesError) throw gradesError;
       
       // Then delete the test
@@ -315,9 +331,10 @@ export const useStore = create<State & Actions>((set, get) => ({
 
       if (error) throw error;
       
+      // Update the local state
       set((state) => ({
-        tests: state.tests.filter(test => test.id !== id),
-        grades: state.grades.filter(grade => grade.testId !== id)
+        tests: state.tests.filter((test) => test.id !== id),
+        grades: state.grades.filter((grade) => grade.testId !== id)
       }));
       
       toast.success('تم حذف الاختبار بنجاح');
@@ -335,49 +352,61 @@ export const useStore = create<State & Actions>((set, get) => ({
     try {
       set({ isLoading: true });
       
-      // Check if a grade record already exists
+      // Check if the grade already exists
       const existingGrade = get().grades.find(
-        g => g.studentId === studentId && g.testId === testId
+        (g) => g.studentId === studentId && g.testId === testId
       );
+      
+      let data;
+      let error;
       
       if (existingGrade) {
         // Update existing grade
-        const { error } = await supabase
+        const { data: updateData, error: updateError } = await supabase
           .from('grades')
           .update({ value })
-          .eq('id', existingGrade.id);
-
-        if (error) throw error;
-        
-        set((state) => ({
-          grades: state.grades.map(grade => 
-            grade.id === existingGrade.id ? { ...grade, value } : grade
-          )
-        }));
-      } else {
-        // Create new grade
-        const { data, error } = await supabase
-          .from('grades')
-          .insert({ 
-            studentid: studentId, // Use studentid (lowercase) to match DB column name
-            testid: testId,      // Use testid (lowercase) to match DB column name
-            value 
-          })
+          .eq('id', existingGrade.id)
           .select()
           .single();
-
-        if (error) throw error;
-        
-        // Convert from DB format to our model format
+          
+        data = updateData;
+        error = updateError;
+      } else {
+        // Create new grade
+        const { data: insertData, error: insertError } = await supabase
+          .from('grades')
+          .insert([{ 
+            studentid: studentId, 
+            testid: testId, 
+            value 
+          }])
+          .select()
+          .single();
+          
+        data = insertData;
+        error = insertError;
+      }
+      
+      if (error) throw error;
+      
+      if (data) {
+        // Convert from DB format to our model
         const newGrade = {
           ...data,
           studentId: data.studentid,
           testId: data.testid
         };
         
-        set((state) => ({
-          grades: [...state.grades, newGrade]
-        }));
+        set((state) => {
+          // Filter out the existing grade if it exists
+          const filteredGrades = state.grades.filter(
+            (g) => !(g.studentId === studentId && g.testId === testId)
+          );
+          
+          return {
+            grades: [...filteredGrades, newGrade]
+          };
+        });
       }
       
       toast.success('تم حفظ الدرجة بنجاح');
@@ -424,6 +453,9 @@ export const useStore = create<State & Actions>((set, get) => ({
   },
   
   getTotalMaxGrade: (): number => {
-    return get().tests.reduce((sum: number, test: Test) => sum + test.maxGrade, 0);
+    return get().tests.reduce((sum, test) => sum + test.maxGrade, 0);
   }
 }));
+
+// Export the store hook
+export default useGradeStore;
