@@ -118,7 +118,7 @@ export const useGradeStore = create<GradeStoreState & GradeStoreActions>((set, g
       const { data: gradesData, error: gradesError } = await supabase
         .from('grades')
         .select('*')
-        .in('student_id', studentIds);
+        .in('studentid', studentIds);
         
       if (gradesError) throw gradesError;
       
