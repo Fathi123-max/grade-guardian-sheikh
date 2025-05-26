@@ -13,10 +13,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import StudentPerformanceChart from "@/components/StudentPerformanceChart";
 
 interface IndexProps {
   session: Session;
 }
+
+const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899'];
 
 const Index: React.FC<IndexProps> = ({ session }) => {
   const { fetchAllData, students, tests, grades } = useStore();
@@ -207,11 +210,92 @@ const Index: React.FC<IndexProps> = ({ session }) => {
                 <CardDescription>عرض وتحليل درجات الطلاب</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="text-center py-12">
-                  <BarChart2 className="h-12 w-12 mx-auto text-gray-400" />
-                  <h3 className="mt-2 text-sm font-medium text-gray-900">لا توجد تقارير متاحة حالياً</h3>
-                  <p className="mt-1 text-sm text-gray-500">سيتم عرض التقارير هنا عند توفر البيانات</p>
-                </div>
+                {students.length === 0 || tests.length === 0 ? (
+                  <div className="text-center py-12">
+                    <BarChart2 className="h-12 w-12 mx-auto text-gray-400" />
+                    <h3 className="mt-2 text-sm font-medium text-gray-900">لا توجد بيانات كافية لعرض التقارير</h3>
+                    <p className="mt-1 text-sm text-gray-500">يرجى إضافة طلاب واختبارات أولاً</p>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <Card className="hover:shadow-md transition-shadow">
+                        <CardHeader className="pb-2">
+                          <CardDescription className="text-sm font-medium">إجمالي الطلاب</CardDescription>
+                          <CardTitle className="text-2xl">{totalStudents}</CardTitle>
+                        </CardHeader>
+                      </Card>
+                      <Card className="hover:shadow-md transition-shadow">
+                        <CardHeader className="pb-2">
+                          <CardDescription className="text-sm font-medium">إجمالي الاختبارات</CardDescription>
+                          <CardTitle className="text-2xl">{totalTests}</CardTitle>
+                        </CardHeader>
+                      </Card>
+                      <Card className="hover:shadow-md transition-shadow">
+                        <CardHeader className="pb-2">
+                          <CardDescription className="text-sm font-medium">متوسط الدرجات</CardDescription>
+                          <CardTitle className="text-2xl">{averageGrade}</CardTitle>
+                        </CardHeader>
+                      </Card>
+                    </div>
+                    
+                    <div className="mt-8">
+                      <h3 className="text-lg font-medium mb-4">ملخص النتائج</h3>
+                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div className="lg:col-span-2">
+                          <StudentPerformanceChart 
+                            students={students} 
+                            grades={grades} 
+                            tests={tests} 
+                          />
+                        </div>
+                        <div className="bg-white rounded-lg border p-4 overflow-auto" style={{ maxHeight: '500px' }}>
+                          <h4 className="font-medium mb-3 text-center">تفاصيل الدرجات</h4>
+                          <div className="space-y-2">
+                            {students.map((student) => {
+                              const studentGrades = grades.filter(g => g.studentId === student.id);
+                              const studentAverage = studentGrades.length > 0
+                                ? (studentGrades.reduce((sum, g) => sum + g.value, 0) / studentGrades.length).toFixed(1)
+                                : 'N/A';
+                              
+                              return (
+                                <div key={student.id} className="p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
+                                  <div className="flex justify-between items-center">
+                                    <span className="font-medium">{student.name}</span>
+                                    <div className="flex items-center">
+                                      <span className="ml-2 font-bold text-gray-800">{studentAverage}%</span>
+                                      <div 
+                                        className="w-3 h-3 rounded-full ml-2" 
+                                        style={{
+                                          backgroundColor: COLORS[students.findIndex(s => s.id === student.id) % COLORS.length]
+                                        }}
+                                      />
+                                    </div>
+                                  </div>
+                                  {studentGrades.length > 0 && (
+                                    <div className="mt-2 pt-2 border-t border-gray-100 text-sm text-gray-600">
+                                      <div className="grid grid-cols-2 gap-2">
+                                        {studentGrades.map(grade => {
+                                          const test = tests.find(t => t.id === grade.testId);
+                                          return test ? (
+                                            <div key={grade.id} className="flex justify-between">
+                                              <span className="truncate max-w-[100px]">{test.name}</span>
+                                              <span>{grade.value}%</span>
+                                            </div>
+                                          ) : null;
+                                        })}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -223,6 +307,8 @@ const Index: React.FC<IndexProps> = ({ session }) => {
         open={studentFormOpen} 
         onOpenChange={setStudentFormOpen}
         userId={session.user.id}
+        student={undefined}
+        studentGrades={{}}
       />
     </div>
   );
