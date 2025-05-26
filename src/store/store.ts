@@ -3,38 +3,34 @@ import { Student, Test, Grade, FormattedStudent } from '../types';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
-interface StoreState {
+// Define state type
+type State = {
   students: Student[];
   tests: Test[];
   grades: Grade[];
   isLoading: boolean;
   error: string | null;
+};
 
-  // Fetch data
+// Define actions type
+type Actions = {
   fetchStudents: (userId: string) => Promise<void>;
   fetchTests: (userId: string) => Promise<void>;
   fetchGrades: (userId: string) => Promise<void>;
   fetchAllData: (userId: string) => Promise<void>;
-
-  // Student operations
   addStudent: (name: string, userId: string) => Promise<Student | null>;
   updateStudent: (id: string, name: string) => Promise<void>;
   deleteStudent: (id: string) => Promise<void>;
-
-  // Test operations
   addTest: (name: string, maxGrade: number, userId: string) => Promise<Test | null>;
   updateTest: (id: string, name: string, maxGrade: number) => Promise<void>;
   deleteTest: (id: string) => Promise<void>;
-
-  // Grade operations
   updateGrade: (studentId: string, testId: string, value: number) => Promise<void>;
-  
-  // Helper functions
   getFormattedStudents: () => FormattedStudent[];
   getTotalMaxGrade: () => number;
-}
+};
 
-export const useStore = create<StoreState>((set, get) => ({
+// Create the store with explicit types
+export const useStore = create<State & Actions>((set, get) => ({
   students: [],
   tests: [],
   grades: [],
@@ -75,10 +71,10 @@ export const useStore = create<StoreState>((set, get) => ({
       if (error) throw error;
       
       // Map database fields to our model
-      const mappedData = data?.map(item => ({
+      const mappedData = (data || []).map(item => ({
         ...item,
         maxGrade: item.maxgrade // Map maxgrade -> maxGrade
-      })) || [];
+      }));
       
       set({ tests: mappedData });
     } catch (error) {
@@ -93,19 +89,35 @@ export const useStore = create<StoreState>((set, get) => ({
   fetchGrades: async (userId: string) => {
     try {
       set({ isLoading: true });
-      const { data, error } = await supabase
+      
+      // First, get all students for this user
+      const { data: studentsData, error: studentsError } = await supabase
+        .from('students')
+        .select('id')
+        .eq('user_id', userId);
+      
+      if (studentsError) throw studentsError;
+      
+      if (!studentsData || studentsData.length === 0) {
+        set({ grades: [] });
+        return;
+      }
+      
+      // Get all grades for these students
+      const studentIds = studentsData.map(s => s.id);
+      const { data: gradesData, error: gradesError } = await supabase
         .from('grades')
-        .select('*, students!inner(*)')
-        .eq('students.user_id', userId);
-
-      if (error) throw error;
+        .select('*')
+        .in('student_id', studentIds);
+        
+      if (gradesError) throw gradesError;
       
       // Map database fields to our model
-      const mappedData = data?.map(item => ({
+      const mappedData = (gradesData || []).map(item => ({
         ...item,
         studentId: item.studentid, // Map studentid -> studentId
-        testId: item.testid       // Map testid -> testId
-      })) || [];
+        testId: item.testid        // Map testid -> testId
+      }));
       
       set({ grades: mappedData });
     } catch (error) {
@@ -379,16 +391,17 @@ export const useStore = create<StoreState>((set, get) => ({
   },
 
   // Helper functions
-  getFormattedStudents: () => {
+  getFormattedStudents: function() {
     const { students, tests, grades } = get();
     
-    return students.map(student => {
-      // Create a map of testId -> grade for this student
+    const result: FormattedStudent[] = [];
+    
+    for (const student of students) {
       const studentGrades: Record<string, number | null> = {};
       let total = 0;
       let maxPossible = 0;
       
-      tests.forEach(test => {
+      for (const test of tests) {
         const grade = grades.find(g => g.studentId === student.id && g.testId === test.id);
         studentGrades[test.id] = grade ? grade.value : null;
         
@@ -396,19 +409,21 @@ export const useStore = create<StoreState>((set, get) => ({
           total += grade.value;
           maxPossible += test.maxGrade;
         }
-      });
+      }
       
-      return {
+      result.push({
         id: student.id,
         name: student.name,
         grades: studentGrades,
         total,
         maxPossible
-      };
-    });
+      });
+    }
+    
+    return result;
   },
   
-  getTotalMaxGrade: () => {
-    return get().tests.reduce((sum, test) => sum + test.maxGrade, 0);
+  getTotalMaxGrade: (): number => {
+    return get().tests.reduce((sum: number, test: Test) => sum + test.maxGrade, 0);
   }
 }));
