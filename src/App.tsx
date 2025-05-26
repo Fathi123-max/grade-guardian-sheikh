@@ -55,6 +55,12 @@ const App = () => {
                   !session ? <AuthForm /> : <Navigate to="/" replace />
                 }
               />
+              <Route
+                path="/signup"
+                element={
+                  !session ? <AuthForm /> : <Navigate to="/" replace />
+                }
+              />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>
